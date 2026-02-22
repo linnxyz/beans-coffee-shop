@@ -167,6 +167,7 @@ input:focus {
   display: block;
 }
 
+
 .user-chip {
   text-align: right;
   font-size: 0.85rem;
@@ -192,7 +193,7 @@ input:focus {
 }
 
 .table-logo {
-  width: clamp(130px, 20vw, 200px);
+  width: clamp(200px, 20vw, 250px);
   height: auto;
   display: block;
 }
@@ -446,6 +447,27 @@ input:focus {
   .panel {
     border-right: none;
     border-bottom: 1px solid var(--border);
+  }
+
+  .btn {
+    border-radius: 10px;
+  }
+
+  .dash-header,
+  .table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.9rem;
+  }
+
+  .user-actions,
+  .table-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .user-chip {
+    text-align: left;
   }
 
   .table-main {

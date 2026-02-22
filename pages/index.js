@@ -17,13 +17,15 @@ export default function Home() {
       <Head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+        <link rel="shortcut icon" href="/assets/favicon.svg" />
         <title>Bean&apos;s Coffee Shop</title>
       </Head>
 
       <div id="app" className="app">
         <main id="auth-view" className="split">
           <section className="panel">
-            <h1>Bean&apos;s Coffee Shop</h1>
+            <img className="table-logo login" src="assets/beans-logo.svg" alt="Bean's Coffee Shop logo" />
             <p className="subtitle">Create an account or log in to hang out at your coffee table.</p>
 
             <div className="card">
