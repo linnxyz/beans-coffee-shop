@@ -417,12 +417,13 @@ input:focus {
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 0.25rem;
+  touch-action: none;
 }
 
 .volume-step {
   border: 1px solid var(--border);
   background: var(--surface);
-  height: 16px;
+  height: 20px;
   border-radius: 4px;
   cursor: pointer;
 }
@@ -569,6 +570,27 @@ input:focus {
     justify-content: space-between;
   }
 
+  .table-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+    align-items: stretch;
+  }
+
+  .table-actions .btn {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .table-actions .table-timer {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    font-size: clamp(1rem, 7vw, 1.4rem);
+    letter-spacing: 0.04em;
+    padding: 0.45rem 0.65rem;
+  }
+
   .user-chip {
     text-align: left;
   }
@@ -576,5 +598,9 @@ input:focus {
   .table-main {
     grid-template-columns: 1fr;
     min-height: auto;
+  }
+
+  .volume-step {
+    height: 24px;
   }
 }

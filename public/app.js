@@ -105,6 +105,8 @@ const ambientMusicButton = document.getElementById("ambient-music");
 const jazzMusicButton = document.getElementById("jazz-music");
 const ambientVolumeWrap = document.getElementById("ambient-volume-wrap");
 const jazzVolumeWrap = document.getElementById("jazz-volume-wrap");
+const ambientVolumeStepsRoot = document.getElementById("ambient-volume-steps");
+const jazzVolumeStepsRoot = document.getElementById("jazz-volume-steps");
 const ambientVolumeSteps = Array.from(document.querySelectorAll("#ambient-volume-steps .volume-step"));
 const jazzVolumeSteps = Array.from(document.querySelectorAll("#jazz-volume-steps .volume-step"));
 const ambientPlayer = document.getElementById("ambient-player");
@@ -344,6 +346,43 @@ function wireVolumeStepControls() {
       setJazzVolumeFromLevel(step.dataset.level);
     });
   });
+
+  function handlePointerVolumeUpdate(container, event, setter) {
+    if (!container) {
+      return;
+    }
+    const rect = container.getBoundingClientRect();
+    if (!rect.width) {
+      return;
+    }
+    const relativeX = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+    const ratio = relativeX / rect.width;
+    const level = Math.max(1, Math.min(10, Math.ceil(ratio * 10)));
+    setter(level);
+  }
+
+  function wireStepDrag(container, setter) {
+    if (!container) {
+      return;
+    }
+
+    container.addEventListener("pointerdown", (event) => {
+      handlePointerVolumeUpdate(container, event, setter);
+      if (typeof container.setPointerCapture === "function") {
+        container.setPointerCapture(event.pointerId);
+      }
+    });
+
+    container.addEventListener("pointermove", (event) => {
+      if (event.buttons === 0 && event.pointerType !== "touch") {
+        return;
+      }
+      handlePointerVolumeUpdate(container, event, setter);
+    });
+  }
+
+  wireStepDrag(ambientVolumeStepsRoot, setAmbientVolumeFromLevel);
+  wireStepDrag(jazzVolumeStepsRoot, setJazzVolumeFromLevel);
 }
 
 function applyMusicVolumes() {
