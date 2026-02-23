@@ -99,6 +99,17 @@ export default function Home() {
               </button>
             </div>
           </section>
+
+          <section className="card room-history-section">
+            <div>
+              <h2>Your table history</h2>
+              <p className="subtitle">Tables you created most recently.</p>
+            </div>
+            <div id="room-history-empty" className="room-history-empty" suppressHydrationWarning>
+              Log in to see your table history.
+            </div>
+            <div id="room-history-list" className="room-history-list"></div>
+          </section>
         </main>
 
         <main id="table-view" className="table-view hidden">
@@ -110,6 +121,9 @@ export default function Home() {
               <div id="table-timer" className="table-timer">
                 00:00:00
               </div>
+              <button id="toggle-dark-mode" className="btn ghost" type="button">
+                Dark mode: Off
+              </button>
               <button id="leave-table" className="btn ghost">
                 Leave table
               </button>
@@ -132,7 +146,7 @@ export default function Home() {
 
               <aside className="table-corner">
                 <div className="mini-widget">
-                  <div className="mini-title">Room</div>
+                  <div className="mini-title">Table</div>
                   <div id="table-title" className="table-title">
                     Coffee Table
                   </div>
@@ -155,6 +169,9 @@ export default function Home() {
                     No messages yet.
                   </div>
                   <div id="chat-log" className="chat-log"></div>
+                  <div id="chat-cooldown" className="chat-cooldown hidden">
+                    Wait 15s before sending another message.
+                  </div>
                   <form id="chat-form" className="chat-compose">
                     <input id="chat-input" type="text" maxLength="500" placeholder="Message this table" />
                     <button id="chat-send" className="btn" type="submit">
@@ -165,17 +182,50 @@ export default function Home() {
 
                 <div className="mini-widget">
                   <div className="mini-title">Music</div>
-                  <label className="field">
-                    <span>Track URL</span>
-                    <input id="music-url" type="url" placeholder="Paste an audio URL" />
-                  </label>
-                  <button id="ambient-music" className="btn ghost" type="button">
-                    Play ambient cafe
-                  </button>
-                  <button id="set-music" className="btn" type="button">
-                    Load my track
-                  </button>
-                  <audio id="music-player" controls></audio>
+                  <div className="music-options">
+                    <button id="ambient-music" className="btn ghost music-mode-btn" type="button">
+                      Cafe ambient
+                    </button>
+                    <button id="jazz-music" className="btn ghost music-mode-btn" type="button">
+                      Jazz
+                    </button>
+                  </div>
+                  <div id="ambient-volume-wrap" className="music-volume hidden">
+                    <label className="music-volume-label" htmlFor="ambient-volume-steps">
+                      Ambient volume
+                    </label>
+                    <div id="ambient-volume-steps" className="volume-steps" role="group" aria-label="Ambient volume">
+                      <button className="volume-step" data-level="1" type="button" aria-label="Ambient volume 1 of 10"></button>
+                      <button className="volume-step" data-level="2" type="button" aria-label="Ambient volume 2 of 10"></button>
+                      <button className="volume-step" data-level="3" type="button" aria-label="Ambient volume 3 of 10"></button>
+                      <button className="volume-step" data-level="4" type="button" aria-label="Ambient volume 4 of 10"></button>
+                      <button className="volume-step" data-level="5" type="button" aria-label="Ambient volume 5 of 10"></button>
+                      <button className="volume-step" data-level="6" type="button" aria-label="Ambient volume 6 of 10"></button>
+                      <button className="volume-step" data-level="7" type="button" aria-label="Ambient volume 7 of 10"></button>
+                      <button className="volume-step" data-level="8" type="button" aria-label="Ambient volume 8 of 10"></button>
+                      <button className="volume-step" data-level="9" type="button" aria-label="Ambient volume 9 of 10"></button>
+                      <button className="volume-step" data-level="10" type="button" aria-label="Ambient volume 10 of 10"></button>
+                    </div>
+                  </div>
+                  <div id="jazz-volume-wrap" className="music-volume hidden">
+                    <label className="music-volume-label" htmlFor="jazz-volume-steps">
+                      Jazz volume
+                    </label>
+                    <div id="jazz-volume-steps" className="volume-steps" role="group" aria-label="Jazz volume">
+                      <button className="volume-step" data-level="1" type="button" aria-label="Jazz volume 1 of 10"></button>
+                      <button className="volume-step" data-level="2" type="button" aria-label="Jazz volume 2 of 10"></button>
+                      <button className="volume-step" data-level="3" type="button" aria-label="Jazz volume 3 of 10"></button>
+                      <button className="volume-step" data-level="4" type="button" aria-label="Jazz volume 4 of 10"></button>
+                      <button className="volume-step" data-level="5" type="button" aria-label="Jazz volume 5 of 10"></button>
+                      <button className="volume-step" data-level="6" type="button" aria-label="Jazz volume 6 of 10"></button>
+                      <button className="volume-step" data-level="7" type="button" aria-label="Jazz volume 7 of 10"></button>
+                      <button className="volume-step" data-level="8" type="button" aria-label="Jazz volume 8 of 10"></button>
+                      <button className="volume-step" data-level="9" type="button" aria-label="Jazz volume 9 of 10"></button>
+                      <button className="volume-step" data-level="10" type="button" aria-label="Jazz volume 10 of 10"></button>
+                    </div>
+                  </div>
+                  <audio id="ambient-player" className="hidden" preload="none"></audio>
+                  <audio id="jazz-player" className="hidden" preload="none"></audio>
                 </div>
               </aside>
             </div>

@@ -10,11 +10,15 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
   getFirestore,
+  collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   serverTimestamp,
   runTransaction,
+  query as firestoreQuery,
+  where,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 import {
   getDatabase,
@@ -54,6 +58,7 @@ const db = getFirestore(app);
 const rtdb = getDatabase(app);
 const googleProvider = new GoogleAuthProvider();
 const TABLE_TTL_MS = 10 * 60 * 1000;
+const CHAT_COOLDOWN_MS = 15 * 1000;
 const JOIN_MESSAGE_TEXT = "Hello! I just joined. (System Message)";
 const LEAVE_MESSAGE_TEXT = "Bye! I just left. (System Message)";
 
@@ -77,11 +82,14 @@ const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const memberTableInput = document.getElementById("member-table");
 const tableNameInput = document.getElementById("table-name");
+const roomHistoryList = document.getElementById("room-history-list");
+const roomHistoryEmpty = document.getElementById("room-history-empty");
 const tableTitle = document.getElementById("table-title");
 const tableCodeLabel = document.getElementById("table-code");
 const copyTableCodeButton = document.getElementById("copy-table-code");
 const tableCreatedAtLabel = document.getElementById("table-created-at");
 const tableTimer = document.getElementById("table-timer");
+const darkModeToggleButton = document.getElementById("toggle-dark-mode");
 const tableStageTitle = document.getElementById("table-stage-title");
 const tableStageNote = document.getElementById("table-stage-note");
 const tableImage = document.getElementById("table-image");
@@ -91,16 +99,28 @@ const chatLog = document.getElementById("chat-log");
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatSendButton = document.getElementById("chat-send");
+const chatCooldownLabel = document.getElementById("chat-cooldown");
 
-const musicUrlInput = document.getElementById("music-url");
 const ambientMusicButton = document.getElementById("ambient-music");
-const setMusicButton = document.getElementById("set-music");
-const musicPlayer = document.getElementById("music-player");
+const jazzMusicButton = document.getElementById("jazz-music");
+const ambientVolumeWrap = document.getElementById("ambient-volume-wrap");
+const jazzVolumeWrap = document.getElementById("jazz-volume-wrap");
+const ambientVolumeSteps = Array.from(document.querySelectorAll("#ambient-volume-steps .volume-step"));
+const jazzVolumeSteps = Array.from(document.querySelectorAll("#jazz-volume-steps .volume-step"));
+const ambientPlayer = document.getElementById("ambient-player");
+const jazzPlayer = document.getElementById("jazz-player");
 const expiryModal = document.getElementById("expiry-modal");
 const expiryMessage = document.getElementById("expiry-message");
 const expiryOkButton = document.getElementById("expiry-ok");
 
-const AMBIENT_CAFE_URL = "https://cdn.pixabay.com/audio/2022/03/15/audio_c8c8a73467.mp3";
+const AMBIENT_CAFE_URL = "assets/music/ambient/cafe-ambient.mp3";
+const JAZZ_TRACK_URLS = [
+  "assets/music/jazz/jazz-1.mp3",
+  "assets/music/jazz/jazz-2.mp3",
+  "assets/music/jazz/jazz-3.mp3",
+];
+const DEFAULT_LOGO_URL = "assets/beans-logo.svg";
+const DARK_MODE_LOGO_URL = "assets/beans-logo-light.svg";
 
 const sessionClientId =
   typeof crypto !== "undefined" && crypto.randomUUID
@@ -126,7 +146,16 @@ const announcedJoinTables = new Set();
 const announcedLeaveTables = new Set();
 let isSendingChat = false;
 let lastChatSubmit = { key: "", at: 0 };
+let chatCooldownUntil = 0;
+let chatCooldownInterval = null;
+let isRoomDarkMode = false;
+let isAmbientOn = false;
+let isJazzOn = false;
+let ambientVolume = 0.5;
+let jazzVolume = 0.6;
+let lastJazzTrackIndex = -1;
 const renderedMessageIds = new Set();
+const themedLogos = Array.from(document.querySelectorAll(".logo, .table-logo"));
 
 function getAuthenticatedUid() {
   const user = auth.currentUser;
@@ -176,6 +205,265 @@ function clearTableExpiry() {
   }
 }
 
+function stopChatCooldownTicker() {
+  if (chatCooldownInterval) {
+    clearInterval(chatCooldownInterval);
+    chatCooldownInterval = null;
+  }
+}
+
+function getChatCooldownRemainingMs() {
+  return Math.max(0, chatCooldownUntil - Date.now());
+}
+
+function updateChatSendUi() {
+  const remainingMs = getChatCooldownRemainingMs();
+  const isCoolingDown = remainingMs > 0;
+  const secondsLeft = Math.ceil(remainingMs / 1000);
+
+  if (chatCooldownLabel) {
+    if (isCoolingDown) {
+      chatCooldownLabel.textContent = `Wait ${secondsLeft}s before sending another message.`;
+      chatCooldownLabel.classList.remove("hidden");
+    } else {
+      chatCooldownLabel.classList.add("hidden");
+    }
+  }
+
+  if (chatSendButton) {
+    if (isSendingChat) {
+      chatSendButton.textContent = "Sending...";
+      chatSendButton.disabled = true;
+      return;
+    }
+
+    if (isCoolingDown) {
+      chatSendButton.textContent = `Wait ${secondsLeft}s`;
+      chatSendButton.disabled = true;
+      return;
+    }
+
+    chatSendButton.textContent = "Send";
+    chatSendButton.disabled = false;
+  }
+}
+
+function clearChatCooldown() {
+  chatCooldownUntil = 0;
+  stopChatCooldownTicker();
+  updateChatSendUi();
+}
+
+function startChatCooldown() {
+  chatCooldownUntil = Date.now() + CHAT_COOLDOWN_MS;
+  updateChatSendUi();
+  stopChatCooldownTicker();
+  chatCooldownInterval = setInterval(() => {
+    if (getChatCooldownRemainingMs() <= 0) {
+      clearChatCooldown();
+      return;
+    }
+    updateChatSendUi();
+  }, 250);
+}
+
+function updateRoomThemeUi() {
+  appRoot.classList.toggle("room-dark", isRoomDarkMode);
+  if (darkModeToggleButton) {
+    darkModeToggleButton.textContent = `Dark mode: ${isRoomDarkMode ? "On" : "Off"}`;
+  }
+  const logoSrc = isRoomDarkMode ? DARK_MODE_LOGO_URL : DEFAULT_LOGO_URL;
+  themedLogos.forEach((logo) => {
+    logo.src = logoSrc;
+  });
+}
+
+function resetRoomTheme() {
+  isRoomDarkMode = false;
+  updateRoomThemeUi();
+}
+
+function updateMusicModeUi() {
+  if (ambientMusicButton) {
+    ambientMusicButton.classList.toggle("is-on", isAmbientOn);
+  }
+  if (jazzMusicButton) {
+    jazzMusicButton.classList.toggle("is-on", isJazzOn);
+  }
+  if (ambientVolumeWrap) {
+    ambientVolumeWrap.classList.toggle("hidden", !isAmbientOn);
+  }
+  if (jazzVolumeWrap) {
+    jazzVolumeWrap.classList.toggle("hidden", !isJazzOn);
+  }
+  updateVolumeStepsUi(ambientVolumeSteps, ambientVolume);
+  updateVolumeStepsUi(jazzVolumeSteps, jazzVolume);
+}
+
+function getVolumeLevel(volume) {
+  return Math.max(1, Math.min(10, Math.round(volume * 10)));
+}
+
+function updateVolumeStepsUi(stepButtons, volume) {
+  const activeLevel = getVolumeLevel(volume);
+  stepButtons.forEach((step) => {
+    const level = Number(step.dataset.level || "0");
+    const isActive = Number.isFinite(level) && level <= activeLevel;
+    step.classList.toggle("is-active", isActive);
+    step.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
+function setAmbientVolumeFromLevel(level) {
+  const normalizedLevel = Math.max(1, Math.min(10, Number(level) || 1));
+  ambientVolume = normalizedLevel / 10;
+  if (ambientPlayer) {
+    ambientPlayer.volume = ambientVolume;
+  }
+  updateVolumeStepsUi(ambientVolumeSteps, ambientVolume);
+}
+
+function setJazzVolumeFromLevel(level) {
+  const normalizedLevel = Math.max(1, Math.min(10, Number(level) || 1));
+  jazzVolume = normalizedLevel / 10;
+  if (jazzPlayer) {
+    jazzPlayer.volume = jazzVolume;
+  }
+  updateVolumeStepsUi(jazzVolumeSteps, jazzVolume);
+}
+
+function wireVolumeStepControls() {
+  ambientVolumeSteps.forEach((step) => {
+    step.addEventListener("click", () => {
+      setAmbientVolumeFromLevel(step.dataset.level);
+    });
+  });
+
+  jazzVolumeSteps.forEach((step) => {
+    step.addEventListener("click", () => {
+      setJazzVolumeFromLevel(step.dataset.level);
+    });
+  });
+}
+
+function applyMusicVolumes() {
+  if (ambientPlayer) {
+    ambientPlayer.volume = ambientVolume;
+  }
+  if (jazzPlayer) {
+    jazzPlayer.volume = jazzVolume;
+  }
+}
+
+function stopMusicPlayback() {
+  if (ambientPlayer) {
+    ambientPlayer.pause();
+    ambientPlayer.removeAttribute("src");
+    ambientPlayer.load();
+  }
+
+  if (jazzPlayer) {
+    jazzPlayer.pause();
+    jazzPlayer.removeAttribute("src");
+    jazzPlayer.load();
+  }
+}
+
+function resetMusicMode() {
+  isAmbientOn = false;
+  isJazzOn = false;
+  lastJazzTrackIndex = -1;
+  stopMusicPlayback();
+  applyMusicVolumes();
+  updateMusicModeUi();
+}
+
+function toggleAmbientMode() {
+  isAmbientOn = !isAmbientOn;
+  updateMusicModeUi();
+  if (!ambientPlayer) {
+    return;
+  }
+
+  if (!isAmbientOn) {
+    ambientPlayer.pause();
+    return;
+  }
+
+  if (ambientPlayer.src !== new URL(AMBIENT_CAFE_URL, window.location.href).toString()) {
+    ambientPlayer.src = AMBIENT_CAFE_URL;
+  }
+  ambientPlayer.loop = true;
+  ambientPlayer.volume = ambientVolume;
+  ambientPlayer.play().catch(() => {
+    isAmbientOn = false;
+    updateMusicModeUi();
+    alert("Tap again to enable audio playback.");
+  });
+}
+
+function getNextJazzTrackIndex() {
+  if (!JAZZ_TRACK_URLS.length) {
+    return -1;
+  }
+  if (JAZZ_TRACK_URLS.length === 1) {
+    return 0;
+  }
+
+  let candidate = Math.floor(Math.random() * JAZZ_TRACK_URLS.length);
+  while (candidate === lastJazzTrackIndex) {
+    candidate = Math.floor(Math.random() * JAZZ_TRACK_URLS.length);
+  }
+  return candidate;
+}
+
+function playJazzTrack() {
+  if (!JAZZ_TRACK_URLS.length) {
+    alert("No jazz tracks configured yet.");
+    return;
+  }
+
+  if (!jazzPlayer || !isJazzOn) {
+    return;
+  }
+
+  const nextIndex = getNextJazzTrackIndex();
+  if (nextIndex < 0) {
+    return;
+  }
+
+  lastJazzTrackIndex = nextIndex;
+  jazzPlayer.loop = false;
+  jazzPlayer.src = JAZZ_TRACK_URLS[nextIndex];
+  jazzPlayer.volume = jazzVolume;
+  jazzPlayer.play().catch(() => {
+    isJazzOn = false;
+    updateMusicModeUi();
+    alert("Tap again to enable audio playback.");
+  });
+}
+
+function toggleJazzMode() {
+  if (!isJazzOn && !JAZZ_TRACK_URLS.length) {
+    alert("No jazz tracks configured yet.");
+    return;
+  }
+
+  isJazzOn = !isJazzOn;
+  updateMusicModeUi();
+
+  if (!jazzPlayer) {
+    return;
+  }
+
+  if (!isJazzOn) {
+    jazzPlayer.pause();
+    return;
+  }
+
+  playJazzTrack();
+}
+
 function resetChatUi() {
   chatLog.innerHTML = "";
   renderedMessageIds.clear();
@@ -185,7 +473,6 @@ function resetChatUi() {
 
 function resetTableStage() {
   tableImage.src = TABLE_IMAGE_BY_COUNT[1];
-  tableStageTitle.textContent = "Table for 1 guest";
   tableStageNote.textContent = "1 person at this table";
 }
 
@@ -291,6 +578,83 @@ function formatElapsed(elapsedMs) {
 function formatCreatedAt(createdAtMs) {
   const date = new Date(createdAtMs);
   return `Started ${date.toLocaleString()}`;
+}
+
+function formatRoomHistoryCreatedAt(createdAtMs) {
+  if (!Number.isFinite(Number(createdAtMs))) {
+    return "Started recently";
+  }
+  return `Created ${new Date(Number(createdAtMs)).toLocaleString()}`;
+}
+
+function clearRoomHistoryUi(message = "No tables created yet.") {
+  if (roomHistoryList) {
+    roomHistoryList.innerHTML = "";
+  }
+  if (roomHistoryEmpty) {
+    roomHistoryEmpty.textContent = message;
+    roomHistoryEmpty.classList.remove("hidden");
+  }
+}
+
+function renderRoomHistory(rooms) {
+  if (!roomHistoryList || !roomHistoryEmpty) {
+    return;
+  }
+
+  roomHistoryList.innerHTML = "";
+  if (!rooms.length) {
+    clearRoomHistoryUi("No tables created yet.");
+    return;
+  }
+
+  roomHistoryEmpty.classList.add("hidden");
+
+  rooms.forEach((room) => {
+    const item = document.createElement("div");
+    item.className = "room-history-item";
+
+    const name = document.createElement("div");
+    name.className = "room-history-name";
+    name.textContent = room.name || "Untitled table";
+
+    const when = document.createElement("div");
+    when.className = "room-history-time";
+    when.textContent = formatRoomHistoryCreatedAt(room.createdAtMs);
+
+    item.appendChild(name);
+    item.appendChild(when);
+    roomHistoryList.appendChild(item);
+  });
+}
+
+async function loadCreatedRoomHistory() {
+  const user = getAuthenticatedUser();
+  if (!user) {
+    clearRoomHistoryUi("Log in to see your table history.");
+    return;
+  }
+
+  try {
+    const roomsRef = collection(db, "rooms");
+    const roomsQuery = firestoreQuery(roomsRef, where("createdBy", "==", user.uid));
+    const snap = await getDocs(roomsQuery);
+
+    const rooms = snap.docs
+      .map((roomDoc) => {
+        const data = roomDoc.data() || {};
+        return {
+          name: data.name || "Coffee Table",
+          createdAtMs: Number(data.createdAtMs) || 0,
+        };
+      })
+      .sort((a, b) => b.createdAtMs - a.createdAtMs)
+      .slice(0, 12);
+
+    renderRoomHistory(rooms);
+  } catch (error) {
+    clearRoomHistoryUi("Unable to load table history right now.");
+  }
 }
 
 function resolveCreatedAtMs(table) {
@@ -626,6 +990,9 @@ function showDashboard(profile) {
   clearChatSubscription();
   clearTableTimer();
   clearTableExpiry();
+  clearChatCooldown();
+  resetRoomTheme();
+  resetMusicMode();
   resetChatUi();
   resetTableStage();
   userName.textContent = profile.name;
@@ -634,24 +1001,31 @@ function showDashboard(profile) {
   dashboardView.classList.remove("hidden");
   tableView.classList.add("hidden");
   appRoot.classList.remove("room-active");
+  loadCreatedRoomHistory();
 }
 
 function showAuth() {
   clearChatSubscription();
   clearTableTimer();
   clearTableExpiry();
+  clearChatCooldown();
+  resetRoomTheme();
+  resetMusicMode();
   resetChatUi();
   resetTableStage();
   authView.classList.remove("hidden");
   dashboardView.classList.add("hidden");
   tableView.classList.add("hidden");
   appRoot.classList.remove("room-active");
+  clearRoomHistoryUi("Log in to see your table history.");
 }
 
 function showTable(table) {
   startTableChat(table.code);
   startTableTimer(resolveCreatedAtMs(table));
   scheduleTableExpiry(table);
+  updateRoomThemeUi();
+  updateChatSendUi();
   updateTableImageByCount(table.personCount || 1);
   tableTitle.textContent = table.name || "Coffee Table";
   tableCodeLabel.textContent = `Code: ${table.code}`;
@@ -843,6 +1217,9 @@ leaveTableButton.addEventListener("click", async () => {
   clearChatSubscription();
   clearTableTimer();
   clearTableExpiry();
+  clearChatCooldown();
+  resetRoomTheme();
+  resetMusicMode();
   resetChatUi();
   resetTableStage();
   setBaseUrl();
@@ -876,6 +1253,11 @@ chatForm.addEventListener("submit", async (event) => {
     return;
   }
 
+  if (getChatCooldownRemainingMs() > 0) {
+    updateChatSendUi();
+    return;
+  }
+
   if (!currentTableCode) {
     alert("Join a table first.");
     return;
@@ -893,9 +1275,7 @@ chatForm.addEventListener("submit", async (event) => {
   }
 
   isSendingChat = true;
-  if (chatSendButton) {
-    chatSendButton.disabled = true;
-  }
+  updateChatSendUi();
 
   try {
     const user = getAuthenticatedUser();
@@ -929,37 +1309,42 @@ chatForm.addEventListener("submit", async (event) => {
       type: "chat",
     });
     lastChatSubmit = { key: dedupeKey, at: Date.now() };
+    startChatCooldown();
     chatInput.value = "";
     chatInput.focus();
   } catch (error) {
     alert(error.message || "Unable to send message.");
   } finally {
     isSendingChat = false;
-    if (chatSendButton) {
-      chatSendButton.disabled = false;
-    }
+    updateChatSendUi();
   }
 });
 
-setMusicButton.addEventListener("click", () => {
-  const url = musicUrlInput.value.trim();
-  if (!url) {
-    alert("Paste a music URL first.");
+darkModeToggleButton.addEventListener("click", () => {
+  if (!appRoot.classList.contains("room-active")) {
     return;
   }
-
-  musicPlayer.src = url;
-  musicPlayer.play().catch(() => {
-    // noop
-  });
+  isRoomDarkMode = !isRoomDarkMode;
+  updateRoomThemeUi();
 });
 
 ambientMusicButton.addEventListener("click", () => {
-  musicPlayer.src = AMBIENT_CAFE_URL;
-  musicPlayer.play().catch(() => {
-    alert("Tap play on the audio player if autoplay is blocked.");
-  });
+  toggleAmbientMode();
 });
+
+jazzMusicButton.addEventListener("click", () => {
+  toggleJazzMode();
+});
+
+jazzPlayer.addEventListener("ended", () => {
+  if (isJazzOn) {
+    playJazzTrack();
+  }
+});
+
+wireVolumeStepControls();
+applyMusicVolumes();
+updateMusicModeUi();
 
 copyTableCodeButton.addEventListener("click", async () => {
   const code = getRoomCodeText();

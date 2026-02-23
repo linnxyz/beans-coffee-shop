@@ -6,6 +6,14 @@
   --surface: #fffaf3;
 }
 
+.room-dark {
+  --bg: #181411;
+  --text: #f4e9da;
+  --muted: #c7b8a6;
+  --border: #4c3f34;
+  --surface: #221c17;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -117,6 +125,11 @@ input:focus {
   color: var(--text);
 }
 
+.btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .divider {
   text-transform: uppercase;
   letter-spacing: 0.15em;
@@ -181,6 +194,45 @@ input:focus {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1.5rem;
+}
+
+.room-history-section {
+  margin-top: 1.5rem;
+}
+
+.room-history-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.room-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.room-history-item {
+  border-top: 1px solid var(--border);
+  padding: 0.65rem 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.room-history-item:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.room-history-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.room-history-time {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .table-view {
@@ -339,6 +391,52 @@ input:focus {
   height: 34px;
 }
 
+.music-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.music-mode-btn.is-on {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.music-volume {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.music-volume-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.volume-steps {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.volume-step {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  height: 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.volume-step.is-active {
+  border-color: var(--text);
+  background: var(--text);
+}
+
+.volume-step:focus-visible {
+  outline: 1px solid var(--text);
+  outline-offset: 2px;
+}
+
 .chat-widget {
   min-height: 0;
 }
@@ -363,6 +461,11 @@ input:focus {
 .chat-compose {
   display: flex;
   gap: 0.45rem;
+}
+
+.chat-cooldown {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .chat-compose input {
